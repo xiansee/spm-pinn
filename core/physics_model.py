@@ -10,13 +10,10 @@ from fipy import (
 )
 from numpy import log, sqrt
 
-from ocp import get_graphite_ocp, get_nmc_ocp
-
 
 class SolidDiffusionSolver:
     """
-    Finite volume solver of 1D diffusion equation using FiPy.
-
+    Finite volume solver of 1D diffusion equation in spherical coordinates using FiPy.
     """
 
     t_col = "t [s]"
@@ -27,22 +24,23 @@ class SolidDiffusionSolver:
 
     def __init__(
         self,
-        c0: float = 15000.0,
-        D: float = 1e-14,
-        alpha: float = 0.5,
-        R: float = 5e-6,
-        nr: int = 20,
+        c0: float = 15000.0,  # Initial concentration
+        D: float = 1e-14,  # Diffusivity
+        alpha: float = 0.5,  # Time stepping scheme blend factor
+        R: float = 5e-6,  # Radius of sphere
+        nr: int = 20,  # Number of space discretization
     ):
         self.mesh = SphericalGrid1D(nr=nr, Lr=R)
         self.conc = CellVariable(mesh=self.mesh, name=r"$c$", value=c0)
         self.conc.faceGrad.constrain([0.0], self.mesh.facesLeft)
 
+        # Combining fully implicit backward and fully explicit forward methods
         self.equation = TransientTerm() == DiffusionTerm(
             coeff=alpha * D
         ) + ExplicitDiffusionTerm(coeff=(1.0 - alpha) * D)
-        self.reset_data()
+        self._reset_data()
 
-    def reset_data(self) -> None:
+    def _reset_data(self) -> None:
         self.data = {
             self.t_col: [],
             self.j_col: [],
@@ -52,7 +50,7 @@ class SolidDiffusionSolver:
         }
 
     def solve(self, time: np.ndarray, current_density: np.ndarray) -> dict:
-        self.reset_data()
+        self._reset_data()
         dt_array = np.diff(time, prepend=0)
 
         for index, (dt, j) in enumerate(zip(dt_array, current_density)):
@@ -72,9 +70,12 @@ class SolidDiffusionSolver:
 
 class SPM:
     """
-    Single Particle Model for a lithium-ion battery initialized with default values for
-    a LG-M50 cell.
+    Single Particle Model for a lithium-ion battery. Equations for single particle model
+    were obtained from:
 
+    Wu, Bin & Zhang, Buyi & Deng, Changyu & Lu, Wei. (2022). Physics-encoded deep
+    learning in identifying battery parameters without direct knowledge of ground truth.
+    Applied Energy. 321. 119390. 10.1016/j.apenergy.2022.119390.
     """
 
     time_col = "Time [s]"
@@ -89,24 +90,24 @@ class SPM:
 
     def __init__(
         self,
-        Up: Callable = get_nmc_ocp,  # Positive electrode OCP as f(conc) [V]
-        Cp_0: float = 35263,  # Initial positive electrode Li concentration [mol/m3]
-        Cp_max: float = 63104,  # Max positive electrode Li concentration [mol/m3]
-        Rp: float = 5.22e-6,  # Positive electrode particle radius [m]
-        ep_s: float = 0.335,  # Positive electrode volume fraction [-]
-        Lp: float = 75.6e-6,  # Positive Electrode thickness [m]
-        kp: float = 5e-10,  # Positive electrode reaction rate constant [m^2.5/(mol^0.5.s)]
-        Dp: float = 1e-14,  # Positive electrode diffusivity [m2/s]
-        Un: Callable = get_graphite_ocp,  # Negative electrode OCP as f(conc) [V]
-        Cn_0: float = 15528,  # Initial negative electrode Li concentration [mol/m3]
-        Cn_max: float = 33133,  # Max negative electrode Li concentration [mol/m3]
-        Rn: float = 5.22e-6,  # Negative electrode particle radius [m]
-        en_s: float = 0.335,  # Negative electrode volume fraction [-]
-        Ln: float = 75.6e-6,  # Negative Electrode thickness [m]
-        kn: float = 5e-10,  # Negative electrode reaction rate constant [m^2.5/(mol^0.5.s)]
-        Dn: float = 2e-14,  # Negative electrode diffusivity [m2/s]
-        Ce: float = 1000,  # Electrolyte Li concentration [mol/m3]
-        R_cell: float = 3.24e-4,  # Cell resistance [ohm m2]
+        Up: Callable,  # Positive electrode OCP as f(conc) [V]
+        Cp_0: float,  # Initial positive electrode Li concentration [mol/m3]
+        Cp_max: float,  # Max positive electrode Li concentration [mol/m3]
+        Rp: float,  # Positive electrode particle radius [m]
+        ep_s: float,  # Positive electrode volume fraction [-]
+        Lp: float,  # Positive Electrode thickness [m]
+        kp: float,  # Positive electrode reaction rate constant [m^2.5/(mol^0.5.s)]
+        Dp: float,  # Positive electrode diffusivity [m2/s]
+        Un: Callable,  # Negative electrode OCP as f(conc) [V]
+        Cn_0: float,  # Initial negative electrode Li concentration [mol/m3]
+        Cn_max: float,  # Max negative electrode Li concentration [mol/m3]
+        Rn: float,  # Negative electrode particle radius [m]
+        en_s: float,  # Negative electrode volume fraction [-]
+        Ln: float,  # Negative Electrode thickness [m]
+        kn: float,  # Negative electrode reaction rate constant [m^2.5/(mol^0.5.s)]
+        Dn: float,  # Negative electrode diffusivity [m2/s]
+        Ce: float,  # Electrolyte Li concentration [mol/m3]
+        R_cell: float,  # Cell resistance [ohm m2]
     ):
         self.Up, self.Un = Up, Un
 
@@ -141,7 +142,7 @@ class SPM:
         duration: float,  # [seconds]
         current_density: float,  # [A/m2]
         delta_t: float = 1,  # [seconds]
-    ):
+    ) -> dict:
         sim_time = np.linspace(0, duration, int((duration + delta_t) / delta_t))
         jp = np.array(
             [
@@ -168,7 +169,6 @@ class SPM:
             * sqrt(Cp_surf)
             * self.Ce**0.5
         )
-
         mn = current_density / (
             self.F
             * self.kn
