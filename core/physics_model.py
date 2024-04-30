@@ -111,6 +111,7 @@ class SPM:
     ):
         self.Up, self.Un = Up, Un
 
+        self.Cp_0 = Cp_0
         self.Cp_max = Cp_max
         self.Rp = Rp
         self.ep_s = ep_s
@@ -119,6 +120,7 @@ class SPM:
         self.ap = 3 * self.ep_s / self.Rp
         self.Dp = Dp
 
+        self.Cn_0 = Cn_0
         self.Cn_max = Cn_max
         self.Rn = Rn
         self.en_s = en_s
@@ -134,8 +136,11 @@ class SPM:
         self.F = 96485.33  # Faraday constant [C/mol]
         self.R = 8.314  # Universal gas constant [J/mol.K]
 
-        self.Cp_solver = SolidDiffusionSolver(c0=float(Cp_0), D=self.Dp, R=self.Rp)
-        self.Cn_solver = SolidDiffusionSolver(c0=float(Cn_0), D=self.Dn, R=self.Rn)
+        self._init_solid_diffusion_models()
+
+    def _init_solid_diffusion_models(self):
+        self.Cp_solver = SolidDiffusionSolver(c0=float(self.Cp_0), D=self.Dp, R=self.Rp)
+        self.Cn_solver = SolidDiffusionSolver(c0=float(self.Cn_0), D=self.Dn, R=self.Rn)
 
     def solve(
         self,

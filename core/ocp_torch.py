@@ -1,7 +1,7 @@
 from typing import Callable
 
 import pybamm
-from numpy import exp, ndarray, tanh
+from torch import Tensor, exp, tanh
 
 parameter_values = pybamm.ParameterValues("OKane2022")
 
@@ -9,7 +9,7 @@ Cp_max = parameter_values["Maximum concentration in positive electrode [mol.m-3]
 Cn_max = parameter_values["Maximum concentration in negative electrode [mol.m-3]"]
 
 
-def get_nmc_ocp(Cs: float | ndarray) -> Callable:
+def get_nmc_ocp(Cs: Tensor) -> Callable:
     """
     NMC-811 open circuit potential as a function of concentration. OCP function obtained
     from PyBaMM:
@@ -36,7 +36,7 @@ def get_nmc_ocp(Cs: float | ndarray) -> Callable:
     )
 
 
-def get_graphite_ocp(Cs: float | ndarray):
+def get_graphite_ocp(Cs: Tensor):
     """
     Graphite open circuit potential as a function of concentration. OCP function obtained
     from PyBaMM:
