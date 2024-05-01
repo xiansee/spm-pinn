@@ -5,7 +5,7 @@ import lightning.pytorch as pl
 from core.data_module import DataModule
 from core.dataset import SimulationDataset
 from core.helper import plot
-from core.loss import RMSE
+from core.loss import PINNLoss
 from core.ocp_torch import get_graphite_ocp, get_nmc_ocp
 from core.pinn_model import SPM_PINN
 from core.physics_model import SPM
@@ -14,7 +14,7 @@ from torch import optim, vmap
 import pickle
 
 dataset = SimulationDataset(data_directory="../data")
-data_module = DataModule(dataset=dataset, train_split=0.5, val_split=0.5, test_split=0)
+data_module = DataModule(dataset=dataset, train_split=1, val_split=0, test_split=0)
 
 model = SPM_PINN(
     Up=vmap(get_nmc_ocp),  # Positive electrode OCP as f(conc) [V]
@@ -36,10 +36,10 @@ model = SPM_PINN(
     Ce=1000,  # Electrolyte Li concentration [mol/m3]
     R_cell=3.24e-4,  # Cell resistance [ohm m2])
     nn_hidden_size=20,
-    nn_num_hidden_layers=2,
+    nn_num_hidden_layers=8,
 )
-loss_fn = RMSE()
-optimizer_algorithm = optim.Adam
+loss_fn = PINNLoss()
+optimizer_algorithm = optim.LBFGS
 optimizer_kwargs = {"lr": 0.01}
 optimizer = optimizer_algorithm(params=model.parameters(), **optimizer_kwargs)
 
@@ -50,8 +50,8 @@ training_module = TrainingModule(
 )
 
 trainer = pl.Trainer(
-    max_epochs=3000,
-    # max_time={"seconds": 60},
+    # max_epochs=500,
+    max_time={"seconds": 1800},
     logger=True,
     enable_progress_bar=False,
     enable_model_summary=False,
@@ -61,13 +61,65 @@ trainer = pl.Trainer(
 trainer.fit(training_module, data_module)
 
 I, Xp, Xn, Y, (N_t, N_rp, N_rn) = dataset[0]
-out, Cp, Cn, (jp, jn) = model(I, Xp, Xn, N_t)
+out = model(I, Xp, Xn, N_t)
+
+Cp0 = model.Cp[Xp[:, 0] == -1].detach().numpy()[:, 0]
+Cn0 = model.Cn[Xn[:, 0] == -1].detach().numpy()[:, 0]
+
+Cplast = model.Cp[Xp[:, 0] == 1].detach().numpy()[:, 0]
+Cnlast = model.Cn[Xn[:, 0] == 1].detach().numpy()[:, 0]
+
+Cp_surf = model.Cp[-N_t:].detach().numpy()[:, 0]
+Cn_surf = model.Cn[-N_t:].detach().numpy()[:, 0]
 
 with open("../data/spm0_Dp=1e-14_Dn=3e-14", "rb") as binary_file:
     true_data = pickle.load(binary_file)
 
 
-Cp_surf = Cp[-N_t:].detach().numpy()[:, 0]
+# =========== Plots ================
+
+plot(
+    x=[
+        true_data.get(SPM.rp_col)[0],
+        true_data.get(SPM.rn_col)[0],
+        true_data.get(SPM.rp_col)[0],
+        true_data.get(SPM.rn_col)[0],
+    ],
+    y=[Cp0, Cn0, true_data.get(SPM.cp_col)[0], true_data.get(SPM.cn_col)[0]],
+    series_names=[
+        "Predicted positive",
+        "Predicted negative",
+        "True positive",
+        "True negative",
+    ],
+    lines=True,
+    markers=False,
+    x_label=f"{SPM.rp_col} | {SPM.rn_col}",
+    y_label=f"{SPM.cp_col} | {SPM.cn_col}",
+    title="Initial concentration",
+)
+
+plot(
+    x=[
+        true_data.get(SPM.rp_col)[-1],
+        true_data.get(SPM.rn_col)[-1],
+        true_data.get(SPM.rp_col)[-1],
+        true_data.get(SPM.rn_col)[-1],
+    ],
+    y=[Cplast, Cnlast, true_data.get(SPM.cp_col)[-1], true_data.get(SPM.cn_col)[-1]],
+    series_names=[
+        "Predicted positive",
+        "Predicted negative",
+        "True positive",
+        "True negative",
+    ],
+    lines=True,
+    markers=False,
+    x_label=f"{SPM.rp_col} | {SPM.rn_col}",
+    y_label=f"{SPM.cp_col} | {SPM.cn_col}",
+    title="Final concentration",
+)
+
 plot(
     x=[true_data.get(SPM.time_col), true_data.get(SPM.time_col)],
     y=[true_data.get(SPM.cp_surf_col), Cp_surf],
@@ -79,19 +131,16 @@ plot(
     title="Positive electrode surface concentration",
 )
 
-# initial = Cn[Xn[:, 0] == 0].detach().numpy()[:, 0]
-# final = Cn[Xn[:, 0] == 30].detach().numpy()[:, 0]
-
-# plot(
-#     x=[range(len(initial)), range(len(initial))],
-#     y=[initial, final],
-#     series_names=["initial", "final"],
-#     lines=True,
-#     markers=False,
-#     x_label="r [m]",
-#     y_label="C [mol/m3]",
-#     title="Negative electrode",
-# )
+plot(
+    x=[true_data.get(SPM.time_col), true_data.get(SPM.time_col)],
+    y=[true_data.get(SPM.cn_surf_col), Cn_surf],
+    series_names=["True", "Predicted"],
+    lines=True,
+    markers=False,
+    x_label=SPM.time_col,
+    y_label=SPM.cp_surf_col,
+    title="Negative electrode surface concentration",
+)
 
 plot(
     x=[true_data.get(SPM.time_col), true_data.get(SPM.time_col)],
@@ -101,4 +150,5 @@ plot(
     markers=False,
     x_label=SPM.time_col,
     y_label=SPM.voltage_col,
+    title="Terminal Voltage",
 )

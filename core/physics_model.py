@@ -30,6 +30,7 @@ class SolidDiffusionSolver:
         R: float = 5e-6,  # Radius of sphere
         nr: int = 20,  # Number of space discretization
     ):
+        self.D = D
         self.mesh = SphericalGrid1D(nr=nr, Lr=R)
         self.conc = CellVariable(mesh=self.mesh, name=r"$c$", value=c0)
         self.conc.faceGrad.constrain([0.0], self.mesh.facesLeft)
@@ -49,13 +50,13 @@ class SolidDiffusionSolver:
             self.c_surf_col: [],
         }
 
-    def solve(self, time: np.ndarray, current_density: np.ndarray) -> dict:
+    def solve(self, time: np.ndarray, mass_flux: np.ndarray) -> dict:
         self._reset_data()
         dt_array = np.diff(time, prepend=0)
 
-        for index, (dt, j) in enumerate(zip(dt_array, current_density)):
+        for index, (dt, j) in enumerate(zip(dt_array, mass_flux)):
             if dt > 0:
-                mass_flux = j
+                mass_flux = -j / self.D
                 self.conc.faceGrad.constrain([mass_flux], self.mesh.facesRight)
                 self.equation.solve(var=self.conc, dt=dt)
 
@@ -84,7 +85,7 @@ class SPM:
     rp_col = "Positive Particle Radius [m]"
     cp_col = "Positive Electrode Concentration [mol/m3]"
     cp_surf_col = "Positive Electrode Surface Concentration [mol/m3]"
-    rn_col = "Negatibe Particle Radius [m]"
+    rn_col = "Negative Particle Radius [m]"
     cn_col = "Negative Electrode Concentration [mol/m3]"
     cn_surf_col = "Negative Electrode Surface Concentration [mol/m3]"
 
@@ -136,9 +137,6 @@ class SPM:
         self.F = 96485.33  # Faraday constant [C/mol]
         self.R = 8.314  # Universal gas constant [J/mol.K]
 
-        self._init_solid_diffusion_models()
-
-    def _init_solid_diffusion_models(self):
         self.Cp_solver = SolidDiffusionSolver(c0=float(self.Cp_0), D=self.Dp, R=self.Rp)
         self.Cn_solver = SolidDiffusionSolver(c0=float(self.Cn_0), D=self.Dn, R=self.Rn)
 
@@ -150,13 +148,10 @@ class SPM:
     ) -> dict:
         sim_time = np.linspace(0, duration, int((duration + delta_t) / delta_t))
         jp = np.array(
-            [
-                -current_density / (self.F * self.ap * self.Lp * self.Dp)
-                for _ in sim_time
-            ]
+            [current_density / (self.F * self.ap * self.Lp) for _ in sim_time]
         )
         jn = np.array(
-            [current_density / (self.F * self.an * self.Ln * self.Dn) for _ in sim_time]
+            [-current_density / (self.F * self.an * self.Ln) for _ in sim_time]
         )
 
         Cp_data = self.Cp_solver.solve(sim_time, jp)

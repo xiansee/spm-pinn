@@ -11,7 +11,7 @@ from core.physics_model import SPM
 
 class SimulationDataset(Dataset):
     norm_settings = {
-        SPM.time_col: (0, 50),
+        SPM.time_col: (0, 30),
         SPM.rp_col: (0, 6e-6),
         SPM.rn_col: (0, 6e-6),
     }

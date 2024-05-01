@@ -95,9 +95,6 @@ class SPM_PINN(nn.Module):
         self.F = 96485.33  # Faraday constant [C/mol]
         self.R = 8.314  # Universal gas constant [J/mol.K]
 
-        self._init_solid_diffusion_models()
-
-    def _init_solid_diffusion_models(self):
         # Positive electrode particle concentration NN
         self.Cp_dnn = DNN(
             input_size=2,
@@ -115,8 +112,8 @@ class SPM_PINN(nn.Module):
         )
 
     def forward(self, I: Tensor, Xp: Tensor, Xn: Tensor, N_t: int) -> Tensor:
-        jp = -I / (self.F * self.ap * self.Lp * self.Dp)
-        jn = I / (self.F * self.an * self.Ln * self.Dn)
+        jp = I / (self.F * self.ap * self.Lp)
+        jn = -I / (self.F * self.an * self.Ln)
 
         Cp = self.Cp_dnn(Xp)
         Cp = self.unnormalize_data(Cp, max_value=self.Cp_max)
@@ -154,7 +151,15 @@ class SPM_PINN(nn.Module):
             + I * self.R_cell
         )
 
-        return V, Cp, Cn, (jp, jn)
+        self.Cp = Cp
+        self.Cp_surf = Cp_surf
+        self.jp = jp
+
+        self.Cn = Cn
+        self.Cn_surf = Cn_surf
+        self.jn = jn
+
+        return V
 
     def unnormalize_data(self, C: Tensor, max_value: float):
         return (C + 1) / 2 * max_value

@@ -34,23 +34,22 @@ class TrainingModule(pl.LightningModule):
     def training_step(self, batch: list, batch_idx: int) -> dict[str, Any]:
         """Step for training datasets."""
 
-        I, Xp, Xn, Y, (N_t, N_rp, N_rn) = batch
+        I, Xp, Xn, Y, (N_t, _, _) = batch
         I, Xp, Xn, Y = I[0], Xp[0], Xn[0], Y[0]
 
-        Y_pred, Cp, Cn, (jp, jn) = self.model(I, Xp, Xn, N_t)
-        training_loss = self.loss_fn(Y_pred, Y)
-
+        Y_pred = self.model(I, Xp, Xn, N_t)
+        training_loss = self.loss_fn(Y_pred, Y, Xp, Xn, N_t, self.model)
         self.log("training_loss", training_loss)
         return training_loss
 
     def validation_step(self, batch: list, batch_idx: int) -> dict[str, Any]:
         """Step for validation datasets."""
 
-        I, Xp, Xn, Y, (N_t, N_rp, N_rn) = batch
+        I, Xp, Xn, Y, (N_t, _, _) = batch
         I, Xp, Xn, Y = I[0], Xp[0], Xn[0], Y[0]
 
-        Y_pred, Cp, Cn, (jp, jn) = self.model(I, Xp, Xn, N_t)
-        validation_accuracy = self.loss_fn(Y_pred, Y)
+        Y_pred = self.model(I, Xp, Xn, N_t)
+        validation_accuracy = self.loss_fn(Y_pred, Y, Xp, Xn, N_t, self.model)
 
         self.log("validation_accuracy", validation_accuracy)
         return validation_accuracy
@@ -58,11 +57,11 @@ class TrainingModule(pl.LightningModule):
     def test_step(self, batch: list, batch_idx: int) -> dict[str, Any]:
         """Step for test datasets."""
 
-        I, Xp, Xn, Y, (N_t, N_rp, N_rn) = batch
+        I, Xp, Xn, Y, (N_t, _, _) = batch
         I, Xp, Xn, Y = I[0], Xp[0], Xn[0], Y[0]
 
-        Y_pred, Cp, Cn, (jp, jn) = self.model(I, Xp, Xn, N_t)
-        test_accuracy = self.loss_fn(Y_pred, Y)
+        Y_pred = self.model(I, Xp, Xn, N_t)
+        test_accuracy = self.loss_fn(Y_pred, Y, Xp, Xn, N_t, self.model)
 
         self.log("test_accuracy", test_accuracy)
         return test_accuracy
